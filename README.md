@@ -11,6 +11,9 @@ The two primary use cases for connecting my desk are:
 
 I have the ability to control my two setpoints via a Home Assistant dashboard, buttons on my Stream Deck, or even via Alexa using a voice command.
 
+A huge thanks to all of the contributors in this HA Community thread:
+https://community.home-assistant.io/t/desky-standing-desk-esphome-works-with-desky-uplift-jiecang-assmann-others/383790/18
+
 <img src="https://github.com/dadcoachengineer/VariDeskAutomation/assets/6666082/9985dcd5-4fd6-4133-8f0c-4f18548edcd7" width="400">
 <img src="https://github.com/dadcoachengineer/VariDeskAutomation/assets/6666082/6e796326-6c20-47f1-b567-593c5da986f6" width="400">
 <img src="https://github.com/dadcoachengineer/VariDeskAutomation/assets/6666082/b8c415d5-e544-4da0-b332-e2a719712933" width="400">
