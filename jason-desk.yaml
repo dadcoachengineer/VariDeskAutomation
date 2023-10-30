@@ -1,0 +1,327 @@
+esphome:
+  name: jason-desk 
+  friendly_name: jason-desk 
+  on_boot:
+    priority: -100.0
+    then:
+    #Request a desk height update after boot.
+      - delay: 5s
+      - switch.turn_on: wake_desk_and_get_height
+
+substitutions:
+  #Use your own ESP pin values
+  desky_request_height_pin: GPIO14 #Request desk height | white wire  
+  desky_purple_pin: GPIO12 #purple wire  
+  desky_down_pin: GPIO05 #Move desk down | yellow wire  
+  desky_up_pin: GPIO04  #Move desk up | green wire  
+
+output:
+  - platform: gpio
+    pin: ${desky_up_pin}
+    id: up_green_wire
+    inverted: true
+  - platform: gpio
+    pin: ${desky_down_pin}
+    id: down_yellow_wire
+    inverted: true
+  - platform: gpio
+    pin: ${desky_purple_pin}
+    id: purple_wire
+    inverted: true
+
+esp8266:
+  board: esp01_1m
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: 
+
+ota:
+  password: 
+
+## For Memory Sensor (debug platform in sensor)
+debug:
+  update_interval: 30s
+
+sensor:
+  # Sensors
+  - platform: uptime
+    name: "Desky Uptime"
+  - platform: wifi_signal
+    name: "Desky WiFi Signal"
+    update_interval: 60s
+  - platform: debug
+    free:
+      name: "Heap Free"
+    fragmentation:
+      name: "Heap Fragmentation"
+    block:
+      name: "Heap Max Block"
+    loop_time:
+      name: "Loop Time"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Jason-Desk Fallback Hotspot"
+    password: 
+
+captive_portal:
+
+####################################################################################################
+##Notes/Info
+####################################################################################################
+
+## Home Assistant Thread: https://community.home-assistant.io/t/desky-standing-desk/383790/3
+## ssieb who generously donated his time and knowledge to developing the custom component may offer some support on the Discord thread (please read both threads first).
+## https://discord.com/channels/429907082951524364/952464939480645642
+
+#Notes:
+# 1. Use this component at own risk. It has not had extensive testing. May void warranty or cause desk faults etc.
+# 2. This controller may bypass desk safety features like collision detection.
+# 3. This component doesn't know about the values stored in your desk. Values in this config are (and must be) set independently.
+# 4. ssieb's solution may be a lot simpler and cleaner for most people. I've cobbled together some more features in this config because I can't programn in C++.
+
+
+#Troubleshooting Tips: 
+#If you ever get a flashing ASr message, you might need to reset your desk.
+#https://desky.com.au/blogs/news/reset-standing-desk-control-panel#:~:text=When%20ready%2C%20press%20and%20hold,Hooray!
+
+
+#TODO 
+#Ask ssieb to make change requests (move logic to component code)
+  # Invert pins
+  # Get Desk Height On Boot
+  # Interlock Up/Down Pins (If not done already)
+  # Interrupt/stop movement function (Stop desk motion)
+
+#other
+  # Test collision detection
+  # Limit external component fetch to just desky? 
+  # Fix Desk Is moving on Boot.
+
+external_components:
+#Fetch ssieb's custom component# https://github.com/ssieb/custom_components/tree/master/components/desky
+  - source:
+      type: git
+      url: https://github.com/ssieb/custom_components
+    components: [ desky ]
+
+uart:
+  - id: desk_uart
+    baud_rate: 9600
+    rx_pin: 1 #Labelled TX on my D1mini clone (mislabelled?)
+    ##You can uncomment the debug section below to see UART messages.
+    # debug:
+      # direction: RX
+      # dummy_receiver: true
+      # after:
+        # bytes: 4
+      # sequence:     
+        # - lambda: UARTDebug::log_int(direction, bytes, ',');
+ 
+desky:
+  id: my_desky
+  ####################################################################################
+  ##Uncomment this block to use Ssieb's move_to componet function.
+  up:    
+    number: 4 #D2
+    inverted: true 
+  down:  
+    number: 5 #D1
+    inverted: true
+  stopping_distance: 15  # optional distance from target to turn off moving, default 15  
+  ####################################################################################
+  height:  # Sensor publishing the current height
+    name: Desky Height
+    id: desky_height
+    accuracy_decimals: 1
+    unit_of_measurement: in
+    #any other sensor options
+    filters:
+    - delta: 0.05 #Only send values to HA if they change
+    - throttle: 200ms #Limit values sent to Ha to 5 per sec.
+    - multiply: 0.1 #convert from mm to cm
+    on_value:
+      then:
+          #If the value changes, then the desk is moving
+        - binary_sensor.template.publish:
+            id: desky_is_moving
+            state: ON
+        - delay: 300ms
+          #Assume it's stopped moving if no height changes after a short time.
+        - binary_sensor.template.publish:
+            id: desky_is_moving
+            state: Off
+            
+binary_sensor:
+  - platform: template
+    id: desky_is_moving
+    name: "Desky Is Moving"
+    filters:
+      - delayed_off: 400ms
+    #If the desk isn't moving for a bit we better turn off attempts at movement. It's like poor man's collision detection? 
+    on_release:
+      then:
+        - button.press: desky_stop_desk
+
+button: 
+#Sit button
+  - platform: template
+    name: Move to Sit Height
+    id: desky_move_to_sit_height1
+    icon: mdi:seat-passenger
+    on_press:
+      then:
+        - lambda: id(my_desky).move_to(int((id(desky_sitting_height_1).state) * 10));  
+#Stand Button             
+  - platform: template
+    name: Move to Stand Height
+    id: desky_move_to_stand_height1
+    icon: mdi:karate
+    on_press:
+      then:
+        - lambda: id(my_desky).move_to(int((id(desky_standing_height_1).state) * 10));  
+
+
+#Stop movement 
+  - platform: template
+    name: Stop Desk
+    id: desky_stop_desk
+    on_press:
+      then:
+        - switch.turn_off: raise_desk
+        - switch.turn_off: lower_desk
+# Combination Buttons
+  - platform: template
+    name: Bump Down
+    id: button_3
+    on_press:
+      then:
+        - output.turn_on: purple_wire
+        - output.turn_on: down_yellow_wire
+        - delay: 750ms
+        - output.turn_off: down_yellow_wire
+        - output.turn_off: purple_wire
+  - platform: template
+    name: Bump Up
+    id: button_4
+    on_press:
+      then:
+        - output.turn_on: purple_wire
+        - output.turn_on: up_green_wire
+        - delay: 750ms
+        - output.turn_off: up_green_wire
+        - output.turn_off: purple_wire
+
+#Move to function
+  - platform: template
+    name: Go To Desky Height x
+    id: go_to_desky_preset_height_x
+    on_press:
+      then:
+      ##Option 1: Uncomment to use Ssieb's move_to componet functions
+        - lambda: id(my_desky).move_to(id(desky_target_height).state*10);  
+
+number:
+#Target Height ("Move desk to height x").
+    #You should probably limit the range you can move the desk to to within the limits you've set via the control panel, perhaps offset a little within the range.
+    #Sending commands higher/lower than this may cause error messages and require desk reset (or worse).
+  - platform: template
+    id: desky_target_height
+    name: "Desky Target Height"
+    optimistic: true
+    unit_of_measurement: in
+    min_value: 29.9 
+    max_value: 43.8
+    step: 0.1
+    
+#Offset correction - Adjust until you get the best accuracy. 
+#The desk keeps moving for a little while after the up/down pins are released and we try to account for this.
+#1.5cm was about right on mine
+  - platform: template
+    name: "Desky Stopping Distance Inches"
+    id: stopping_distance_in
+    unit_of_measurement: in
+    optimistic: true
+    min_value: 0
+    max_value: 2
+    step: 0.1
+    restore_value: true
+    initial_value: 1.5
+
+#Standing Height #1 - Set a standing height. 
+  - platform: template
+    id: desky_standing_height_1
+    name: "Standing Height 1"
+    optimistic: true
+    unit_of_measurement: in
+    #Limit the range
+    min_value: 43.0
+    max_value: 43.8
+    step: 0.1
+    restore_value: true
+    initial_value: 43.8
+
+  
+#Sitting Height #1 - Set a sitting height. This is independant of what you've set via the control panel.
+  - platform: template
+    id: desky_sitting_height_1
+    name: "Sitting Height 1"
+    optimistic: true
+    unit_of_measurement: in
+    #Limit the range
+    min_value: 29.9
+    max_value: 30.0
+    step: 0.1
+    restore_value: true
+    initial_value: 29.9
+
+      
+switch:
+#wake up ther desk and request it sends its height 
+  - platform: gpio
+    id: wake_desk_and_get_height
+    name: "Request Desk Height"
+    pin:
+      number: GPIO14
+      inverted: true
+    on_turn_on:
+    - delay: 100ms
+    - switch.turn_off: wake_desk_and_get_height
+  - platform: restart
+    name: "Desky Restart"
+
+#Raise the desk 
+  - platform: gpio
+    id: raise_desk
+    name: "Raise Desk"
+    pin:
+      number: GPIO4
+      # mode: INPUT_PULLUP
+      inverted: true
+    interlock: lower_desk
+    on_turn_on:
+    #Auto off after 15s just in case
+    - delay: 15s
+    - switch.turn_off: raise_desk
+#Lower the desk 
+  - platform: gpio
+    id: lower_desk
+    name: "Lower Desk" 
+    pin:
+      number: GPIO5
+      # mode: INPUT_PULLUP
+      inverted: true
+    interlock: raise_desk
+    on_turn_on:
+   #Auto off after 15s just in case
+    - delay: 15s
+    - switch.turn_off: lower_desk
