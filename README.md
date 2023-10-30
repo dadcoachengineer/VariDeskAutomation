@@ -11,5 +11,6 @@ The two primary use cases for connecting my desk are:
 
 I have the ability to control my two setpoints via a Home Assistant dashboard, buttons on my Stream Deck, or even via Alexa using a voice command.
 
+![IMG_0382](https://github.com/dadcoachengineer/VariDeskAutomation/assets/6666082/9985dcd5-4fd6-4133-8f0c-4f18548edcd7)
 ![08_47_43](https://github.com/dadcoachengineer/VariDeskAutomation/assets/6666082/6e796326-6c20-47f1-b567-593c5da986f6)
 ![IMG_0380](https://github.com/dadcoachengineer/VariDeskAutomation/assets/6666082/b8c415d5-e544-4da0-b332-e2a719712933)
